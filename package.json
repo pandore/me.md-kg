@@ -1,0 +1,32 @@
+{
+  "name": "me.md-kg",
+  "version": "0.1.0",
+  "description": "Personal knowledge graph for OpenClaw — verified structured knowledge about the user via AI-guided interviews",
+  "author": "Oleksii Nikitin",
+  "license": "MIT",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx watch src/cli.ts",
+    "cli": "tsx src/cli.ts",
+    "test": "vitest run",
+    "seed": "tsx src/cli.ts seed",
+    "onboard": "tsx src/cli.ts onboard",
+    "query": "tsx src/cli.ts query",
+    "browse": "tsx src/cli.ts browse",
+    "stats": "tsx src/cli.ts stats"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/node": "^22.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0",
+    "vitest": "^4.1.0"
+  },
+  "dependencies": {
+    "better-sqlite3": "^12.8.0"
+  }
+}
