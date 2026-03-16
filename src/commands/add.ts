@@ -25,13 +25,20 @@ export async function add(text: string, dryRun: boolean = false) {
   return {
     ok: true as const,
     data: {
-      message: `Extracted ${result.facts.length} facts, inserted ${result.inserted}, deduplicated ${result.deduplicated}`,
+      message: `Extracted ${result.facts.length} facts, inserted ${result.inserted}, deduplicated ${result.deduplicated}` +
+        (result.conflicts.length > 0 ? `, ${result.conflicts.length} conflicts resolved` : ''),
       facts: result.facts.map(f => ({
         source: f.source_entity.name,
         relation: f.relation_type,
         target: f.target_entity.name,
         confidence: f.confidence,
       })),
+      conflicts: result.conflicts.length > 0 ? result.conflicts.map(c => ({
+        relation: c.relationType,
+        old_value: c.existingTarget,
+        new_value: c.newTarget,
+        resolution: 'old superseded',
+      })) : undefined,
     },
   };
 }

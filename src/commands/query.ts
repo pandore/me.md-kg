@@ -1,5 +1,6 @@
 import { getDb } from '../core/db.js';
 import { callAnthropic, isApiKeyConfigured } from '../extraction/anthropic.js';
+import { isEmbeddingsConfigured, getQueryEmbedding, cosineSimilarity } from '../extraction/embeddings.js';
 
 export async function query(question: string) {
   const db = getDb();
@@ -23,8 +24,8 @@ export async function query(question: string) {
     }
   }
 
-  // Also search relation summaries
-  const relationResults = db.prepare(`
+  // Also search relation summaries (keyword-based)
+  let relationResults = db.prepare(`
     SELECT r.id, r.type, r.summary, r.confidence, r.verified,
            s.name as source_name, s.types as source_types,
            t.name as target_name, t.types as target_types
@@ -39,6 +40,24 @@ export async function query(question: string) {
     id: string; type: string; summary: string | null; confidence: number; verified: number;
     source_name: string; source_types: string; target_name: string; target_types: string;
   }>;
+
+  // Semantic search with Voyage AI embeddings if available and keyword search didn't find much
+  if (isEmbeddingsConfigured() && relationResults.length < 5) {
+    try {
+      const semanticResults = await semanticSearch(db, question, 20);
+      // Merge with keyword results (deduplicate by id)
+      const existingIds = new Set(relationResults.map(r => r.id));
+      for (const sr of semanticResults) {
+        if (!existingIds.has(sr.id)) {
+          relationResults.push(sr);
+        }
+      }
+      // Re-sort by relevance
+      relationResults = relationResults.slice(0, 20);
+    } catch (e: any) {
+      console.error(`[query] Semantic search failed: ${e.message}`);
+    }
+  }
 
   // If we have an API key, use AI to synthesize an answer
   let answer: string | undefined;
@@ -82,4 +101,57 @@ export async function query(question: string) {
       })),
     },
   };
+}
+
+/**
+ * Semantic search: embed the question, compare with all relation summaries.
+ * Since we don't store embeddings in the DB yet, we compute them on-the-fly
+ * for the relation summaries and rank by cosine similarity.
+ */
+async function semanticSearch(
+  db: ReturnType<typeof getDb>,
+  question: string,
+  limit: number,
+): Promise<Array<{
+  id: string; type: string; summary: string | null; confidence: number; verified: number;
+  source_name: string; source_types: string; target_name: string; target_types: string;
+}>> {
+  // Get all active relations with summaries
+  const allRelations = db.prepare(`
+    SELECT r.id, r.type, r.summary, r.confidence, r.verified,
+           s.name as source_name, s.types as source_types,
+           t.name as target_name, t.types as target_types
+    FROM relation r
+    JOIN entity s ON r.source_id = s.id
+    JOIN entity t ON r.target_id = t.id
+    WHERE r.valid_until IS NULL AND r.summary IS NOT NULL
+    ORDER BY r.verified DESC, r.confidence DESC
+    LIMIT 100
+  `).all() as Array<{
+    id: string; type: string; summary: string | null; confidence: number; verified: number;
+    source_name: string; source_types: string; target_name: string; target_types: string;
+  }>;
+
+  if (allRelations.length === 0) return [];
+
+  // Build text representations for embedding
+  const texts = allRelations.map(r =>
+    `${r.source_name} ${r.type} ${r.target_name}: ${r.summary || ''}`
+  );
+
+  // Get query embedding
+  const queryEmb = await getQueryEmbedding(question);
+
+  // Get document embeddings (batch — Voyage supports up to 128 texts per call)
+  const { getEmbeddings } = await import('../extraction/embeddings.js');
+  const docEmbs = await getEmbeddings(texts);
+
+  // Score and rank
+  const scored = allRelations.map((r, i) => ({
+    ...r,
+    score: cosineSimilarity(queryEmb, docEmbs[i]),
+  }));
+
+  scored.sort((a, b) => b.score - a.score);
+  return scored.slice(0, limit);
 }

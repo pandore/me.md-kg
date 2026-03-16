@@ -18,7 +18,7 @@ async function main() {
     console.log(JSON.stringify({
       ok: true,
       data: {
-        commands: ['seed', 'stats', 'browse', 'add', 'verify', 'query', 'export', 'merge', 'ingest', 'onboard'],
+        commands: ['seed', 'stats', 'browse', 'add', 'verify', 'query', 'export', 'merge', 'ingest', 'watch', 'onboard'],
         usage: 'tsx src/cli.ts <command> [args]',
       },
     }));
@@ -119,6 +119,17 @@ async function main() {
           result = { ok: false, error: 'Usage: merge <canonical-name> <name2> [name3 ...]' };
         } else {
           result = merge(mergeNames);
+        }
+        break;
+      }
+      case 'watch': {
+        const { watchDir } = await import('./commands/watch.js');
+        const watchPath = getFlag(args, '--dir') || args[1];
+        const watchType = (getFlag(args, '--type') || 'lcm_message') as 'lcm_message' | 'lcm_summary';
+        if (!watchPath) {
+          result = { ok: false, error: 'Usage: watch <dir> [--type lcm_message|lcm_summary]' };
+        } else {
+          result = await watchDir(watchPath, watchType);
         }
         break;
       }

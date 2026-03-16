@@ -2,6 +2,7 @@ import { callAnthropic, isApiKeyConfigured } from './anthropic.js';
 import { chunkContent } from './chunk.js';
 import { buildExtractionSystemPrompt, buildExtractionUserPrompt } from './prompt.js';
 import { isDuplicateRelation } from './dedup.js';
+import { detectConflict, resolveConflictSupersede, type ConflictResult } from './conflicts.js';
 import { findOrCreateEntity, createRelation, createEpisode } from '../core/entity-ops.js';
 import type { EntityType, ExtractedFact } from '../core/types.js';
 
@@ -13,10 +14,11 @@ export async function extractAndInsert(text: string): Promise<{
   facts: ExtractedFact[];
   inserted: number;
   deduplicated: number;
+  conflicts: ConflictResult[];
 }> {
   const facts = await extractFacts(text);
-  const { inserted, deduplicated } = insertFacts(facts, 'manual');
-  return { facts, inserted, deduplicated };
+  const { inserted, deduplicated, conflicts } = insertFacts(facts, 'manual');
+  return { facts, inserted, deduplicated, conflicts };
 }
 
 /**
@@ -96,9 +98,10 @@ function parseExtractionResponse(responseText: string): ExtractedFact[] {
 /**
  * Insert extracted facts into the database.
  */
-export function insertFacts(facts: ExtractedFact[], provenance: string, sourceType: string = 'manual'): { inserted: number; deduplicated: number } {
+export function insertFacts(facts: ExtractedFact[], provenance: string, sourceType: string = 'manual'): { inserted: number; deduplicated: number; conflicts: ConflictResult[] } {
   let inserted = 0;
   let deduplicated = 0;
+  const conflicts: ConflictResult[] = [];
 
   for (const fact of facts) {
     const sourceId = findOrCreateEntity(
@@ -114,6 +117,15 @@ export function insertFacts(facts: ExtractedFact[], provenance: string, sourceTy
     if (isDuplicateRelation(sourceId, targetId, fact.relation_type)) {
       deduplicated++;
       continue;
+    }
+
+    // Check for conflicting relation (e.g., lives_in X vs lives_in Y)
+    const conflict = detectConflict(sourceId, targetId, fact.relation_type);
+    if (conflict) {
+      conflicts.push(conflict);
+      // Supersede the old fact — newer info takes precedence
+      resolveConflictSupersede(conflict.existingRelationId);
+      console.error(`[extract] Conflict: ${conflict.relationType} "${conflict.existingTarget}" → "${conflict.newTarget}" (old superseded)`);
     }
 
     const relationId = createRelation({
@@ -136,7 +148,7 @@ export function insertFacts(facts: ExtractedFact[], provenance: string, sourceTy
     inserted++;
   }
 
-  return { inserted, deduplicated };
+  return { inserted, deduplicated, conflicts };
 }
 
 /**

@@ -6,7 +6,8 @@
   "license": "MIT",
   "type": "module",
   "bin": {
-    "memd": "./src/cli.ts"
+    "memd": "./src/cli.ts",
+    "memd-mcp": "./src/mcp-server.ts"
   },
   "engines": {
     "node": ">=22"
@@ -20,7 +21,8 @@
     "onboard": "tsx src/cli.ts onboard",
     "query": "tsx src/cli.ts query",
     "browse": "tsx src/cli.ts browse",
-    "stats": "tsx src/cli.ts stats"
+    "stats": "tsx src/cli.ts stats",
+    "mcp": "tsx src/mcp-server.ts"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.13",
@@ -30,6 +32,7 @@
     "vitest": "^4.1.0"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.27.1",
     "better-sqlite3": "^12.8.0"
   }
 }

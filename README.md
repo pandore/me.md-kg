@@ -1,6 +1,6 @@
 # me.md-kg
 
-Personal knowledge graph that stores verified facts about you as entity-relation triples. Designed as a standalone CLI tool that AI agents (like [OpenClaw](https://openclaw.dev)) invoke to read, write, and query your personal context.
+Personal knowledge graph that stores verified facts about you as entity-relation triples. Designed as a standalone CLI tool and MCP server that AI agents (like [OpenClaw](https://openclaw.dev)) invoke to read, write, and query your personal context.
 
 ```
 You → works_at → Podavach (e-commerce)
@@ -67,12 +67,14 @@ npm run cli onboard
 | `verify --confirm <ids>` | Confirm specific facts by ID |
 | `verify --reject <ids>` | Reject specific facts by ID |
 | `verify --edit <id> "text"` | Edit and verify a fact |
-| `query <question>` | Natural language search across the graph |
+| `query <question>` | Natural language + semantic search across the graph |
 | `export --format <md\|claude\|json>` | Export verified knowledge |
 | `export --tags <tag1,tag2>` | Filter export by access tags |
 | `ingest --type <lcm_message\|lcm_summary> <text>` | Ingest text from LCM into the graph |
 | `merge <canonical> <name2> [name3...]` | Merge duplicate entities into one |
+| `watch <dir> [--type lcm_message]` | Watch directory for new files and auto-ingest |
 | `onboard` | Guided multi-turn interview to build initial graph |
+| `onboard --status` | Check onboarding progress (areas covered, facts extracted) |
 | `onboard --reset` | Reset onboarding progress |
 
 ### Global Flags
@@ -83,35 +85,81 @@ npm run cli onboard
 
 Every command outputs `{ ok: boolean, data?: any, error?: string }` as JSON to stdout. Logs go to stderr.
 
+## MCP Server
+
+me.md-kg includes an MCP (Model Context Protocol) server for direct integration with AI agents like Claude Desktop, OpenClaw, or any MCP client.
+
+```bash
+# Run the MCP server (stdio transport)
+npm run mcp
+
+# Or with tsx directly
+tsx src/mcp-server.ts
+```
+
+### Claude Desktop Configuration
+
+Add to your Claude Desktop `claude_desktop_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "me.md-kg": {
+      "command": "tsx",
+      "args": ["src/mcp-server.ts"],
+      "cwd": "/path/to/me.md-kg"
+    }
+  }
+}
+```
+
+### Available MCP Tools
+
+| Tool | Description |
+|------|-------------|
+| `kg_stats` | Graph statistics |
+| `kg_browse` | Explore entity neighborhood |
+| `kg_query` | Natural language search |
+| `kg_add` | Extract and insert facts |
+| `kg_verify` | Review/confirm/reject facts |
+| `kg_export` | Export as markdown/claude/json |
+| `kg_merge` | Merge duplicate entities |
+| `kg_ingest` | Ingest from LCM sources |
+
 ## Architecture
 
 ```
-CLI (src/cli.ts)
-  |
-  ├── Commands (src/commands/)
+CLI (src/cli.ts)              MCP Server (src/mcp-server.ts)
+  |                              |
+  ├── Commands (src/commands/)   |  (shared command layer)
   │   ├── seed    — Parse markdown → entities + relations
   │   ├── stats   — Graph statistics
   │   ├── browse  — N-hop graph traversal
-  │   ├── add     — AI fact extraction → insert
+  │   ├── add     — AI fact extraction → insert (with conflict detection)
   │   ├── verify  — Human verification loop
-  │   ├── query   — NL search + AI summary
+  │   ├── query   — NL + semantic search + AI summary
   │   ├── export  — Markdown / CLAUDE.md / JSON
-  │   └── onboard — Guided interview flow
+  │   ├── merge   — Entity deduplication
+  │   ├── ingest  — LCM passive extraction
+  │   ├── watch   — Directory file watcher
+  │   └── onboard — Guided interview flow (stateful)
   │
   ├── Core (src/core/)
   │   ├── db.ts         — SQLite connection (better-sqlite3, WAL mode)
-  │   ├── schema.sql    — Entity, relation, episode, assessment tables
-  │   ├── entity-ops.ts — CRUD for entities, relations, episodes
+  │   ├── schema.sql    — Entity, relation, episode, assessment, alias tables
+  │   ├── entity-ops.ts — CRUD with fuzzy dedup (Jaro-Winkler)
   │   ├── types.ts      — TypeScript interfaces
   │   ├── verification.ts — Confirm/reject/edit with provenance
   │   └── reverify.ts   — Re-verification scheduling
   │
   ├── Extraction (src/extraction/)
   │   ├── anthropic.ts  — Thin HTTP client (no SDK)
-  │   ├── extract.ts    — AI pipeline + rule-based fallback
+  │   ├── extract.ts    — AI pipeline + rule-based fallback + conflict detection
+  │   ├── embeddings.ts — Voyage AI embeddings for semantic search
+  │   ├── conflicts.ts  — Contradiction detection and resolution
   │   ├── chunk.ts      — Content chunking
-  │   ├── prompt.ts     — Triple extraction prompts
-  │   └── dedup.ts      — Entity/relation deduplication
+  │   ├── prompt.ts     — Triple extraction prompts (multilingual)
+  │   └── dedup.ts      — Entity dedup (Jaro-Winkler + normalize + aliases)
   │
   ├── Export (src/export/)
   │   ├── markdown.ts   — me.md format
@@ -126,15 +174,18 @@ CLI (src/cli.ts)
 
 ## Data Model
 
-**Entities** — people, organizations, places, concepts, services, skills, values, etc.
+**Entities** — people, organizations, places, concepts, services, skills, values, etc. Each entity has a `types` array (e.g., `["person", "doctor"]`) supporting multi-type classification.
 
 **Relations** — typed edges between entities with:
 - Temporal validity (`valid_from` / `valid_until`)
 - Verification status and confidence score (0-1)
 - Provenance tracking (where did this fact come from?)
 - Access control tags (which agents can see this fact?)
+- Conflict detection (contradicting facts auto-superseded)
 
 **Episodes** — provenance records linking each relation to its source material.
+
+**Aliases** — alternative names for entities (created by merge, used by dedup).
 
 All stored in SQLite at `~/.memd/kg.db`. No external database server needed.
 
@@ -176,13 +227,14 @@ ln -s ~/me.md-kg/src/skill ~/.openclaw/workspace/skills/me.md-kg
 tsx src/cli.ts seed --workspace ~/.openclaw/workspace
 ```
 
-The agent invokes commands via `tsx ~/me.md-kg/src/cli.ts <command>` and parses the JSON output.
+The agent invokes commands via `tsx ~/me.md-kg/src/cli.ts <command>` and parses the JSON output, or connects via MCP.
 
 ## Environment Variables
 
 | Variable | Required | Description |
 |----------|----------|-------------|
 | `ANTHROPIC_API_KEY` | For AI features | Anthropic API key (Claude Sonnet) |
+| `VOYAGE_API_KEY` | For semantic search | Voyage AI key for embeddings |
 | `MEMD_DB_PATH` | No | Override database path (default: `~/.memd/kg.db`) |
 | `OPENCLAW_WORKSPACE` | No | Default workspace for seed command |
 
@@ -190,6 +242,7 @@ The agent invokes commands via `tsx ~/me.md-kg/src/cli.ts <command>` and parses 
 
 ```bash
 npm run cli stats          # Run any command
+npm run mcp                # Start MCP server
 npm run build              # Compile TypeScript
 npm test                   # Run tests (vitest)
 ```
