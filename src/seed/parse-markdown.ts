@@ -13,17 +13,17 @@ export interface ParsedFact {
  * Parse a MEMORY.md or USER.md file into structured facts.
  * Handles sections, bullets, key-value pairs.
  */
-export function parseMarkdownFile(filePath: string, provenance: string, userName?: string): ParsedFact[] {
+export function parseMarkdownFile(filePath: string, provenance: string, userName?: string, lockUserName: boolean = false): ParsedFact[] {
   let content: string;
   try {
     content = readFileSync(filePath, 'utf-8');
   } catch {
     return [];
   }
-  return parseMarkdown(content, provenance, userName);
+  return parseMarkdown(content, provenance, userName, lockUserName);
 }
 
-export function parseMarkdown(content: string, provenance: string, initialUserName?: string): ParsedFact[] {
+export function parseMarkdown(content: string, provenance: string, initialUserName?: string, lockUserName: boolean = false): ParsedFact[] {
   const facts: ParsedFact[] = [];
   const lines = content.split('\n');
   let currentSection = 'General';
@@ -48,8 +48,8 @@ export function parseMarkdown(content: string, provenance: string, initialUserNa
     if (kvMatch) {
       const key = kvMatch[1].trim().toLowerCase();
       const value = kvMatch[2].trim();
-      // Override userName when Name: is found
-      if (key === 'name' && value) {
+      // Override userName when Name: is found (unless locked by --user flag)
+      if (key === 'name' && value && !lockUserName) {
         userName = value;
       }
       const fact = keyValueToFact(key, value, userName, currentSection, provenance);

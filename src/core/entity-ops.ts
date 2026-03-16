@@ -1,32 +1,35 @@
 import { getDb } from './db.js';
 import { randomBytes } from 'node:crypto';
+import { findDuplicateEntity } from '../extraction/dedup.js';
 
 function genId(): string {
   return randomBytes(8).toString('hex');
 }
 
 /**
- * Find entity by name (case-insensitive), or create if not found.
+ * Find entity by name (case-insensitive, then fuzzy via Jaro-Winkler), or create if not found.
  * If found, merges the new type into the existing types array.
  * Returns entity ID.
  */
 export function findOrCreateEntity(name: string, type: string, summary?: string): string {
   const db = getDb();
 
+  // Exact case-insensitive match first
   const existing = db.prepare(
     'SELECT id, types FROM entity WHERE LOWER(name) = LOWER(?)'
   ).get(name) as { id: string; types: string } | undefined;
 
   if (existing) {
-    // Merge type into existing types array
-    const currentTypes: string[] = JSON.parse(existing.types);
-    if (!currentTypes.includes(type)) {
-      currentTypes.push(type);
-      db.prepare(
-        "UPDATE entity SET types = ?, updated_at = datetime('now') WHERE id = ?"
-      ).run(JSON.stringify(currentTypes), existing.id);
+    return mergeTypeAndReturn(db, existing.id, existing.types, type);
+  }
+
+  // Fuzzy match via dedup (normalized + Jaro-Winkler + aliases)
+  const fuzzy = findDuplicateEntity(name);
+  if (fuzzy) {
+    const row = db.prepare('SELECT types FROM entity WHERE id = ?').get(fuzzy.id) as { types: string } | undefined;
+    if (row) {
+      return mergeTypeAndReturn(db, fuzzy.id, row.types, type);
     }
-    return existing.id;
   }
 
   const id = genId();
@@ -35,6 +38,17 @@ export function findOrCreateEntity(name: string, type: string, summary?: string)
   ).run(id, name, JSON.stringify([type]), summary || null);
 
   return id;
+}
+
+function mergeTypeAndReturn(db: ReturnType<typeof getDb>, entityId: string, typesJson: string, newType: string): string {
+  const currentTypes: string[] = JSON.parse(typesJson);
+  if (!currentTypes.includes(newType)) {
+    currentTypes.push(newType);
+    db.prepare(
+      "UPDATE entity SET types = ?, updated_at = datetime('now') WHERE id = ?"
+    ).run(JSON.stringify(currentTypes), entityId);
+  }
+  return entityId;
 }
 
 /**

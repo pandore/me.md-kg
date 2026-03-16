@@ -21,6 +21,7 @@ function detectUserName(filePath: string): string | undefined {
 export async function seed(workspacePath?: string, userName?: string, dryRun: boolean = false) {
   const db = getDb();
   const allFacts: ParsedFact[] = [];
+  const userNameFromCli = !!userName; // true if --user flag was provided
 
   if (workspacePath) {
     const wsPath = resolve(workspacePath);
@@ -32,7 +33,7 @@ export async function seed(workspacePath?: string, userName?: string, dryRun: bo
     const memoryPath = join(wsPath, 'MEMORY.md');
     const userPath = join(wsPath, 'USER.md');
 
-    // Detect userName from USER.md if not provided
+    // Detect userName from USER.md if not provided via --user
     if (!userName && existsSync(userPath)) {
       userName = detectUserName(userPath);
     }
@@ -43,12 +44,12 @@ export async function seed(workspacePath?: string, userName?: string, dryRun: bo
 
     if (existsSync(memoryPath)) {
       console.error('[seed] Parsing MEMORY.md...');
-      allFacts.push(...parseMarkdownFile(memoryPath, 'seed:memory_md', userName));
+      allFacts.push(...parseMarkdownFile(memoryPath, 'seed:memory_md', userName, userNameFromCli));
     }
 
     if (existsSync(userPath)) {
       console.error('[seed] Parsing USER.md...');
-      allFacts.push(...parseMarkdownFile(userPath, 'seed:user_md', userName));
+      allFacts.push(...parseMarkdownFile(userPath, 'seed:user_md', userName, userNameFromCli));
     }
 
     // Also check for memory/ subdirectory (Claude-style memory files)
@@ -58,7 +59,7 @@ export async function seed(workspacePath?: string, userName?: string, dryRun: bo
       const files = readdirSync(memoryDir).filter(f => f.endsWith('.md'));
       for (const file of files) {
         const filePath = join(memoryDir, file);
-        allFacts.push(...parseMarkdownFile(filePath, `seed:memory/${file}`, userName));
+        allFacts.push(...parseMarkdownFile(filePath, `seed:memory/${file}`, userName, userNameFromCli));
       }
     }
   } else {

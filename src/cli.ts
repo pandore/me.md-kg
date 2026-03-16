@@ -101,7 +101,8 @@ async function main() {
       case 'ingest': {
         const { ingest } = await import('./commands/ingest.js');
         const ingestType = getFlag(args, '--type') as 'lcm_message' | 'lcm_summary' | undefined;
-        const ingestText = args.filter((a, i) => a !== '--type' && args[i - 1] !== '--type' && i > 0).join(' ');
+        const flagsToStrip = new Set(['--type', '--dry-run']);
+        const ingestText = args.filter((a, i) => !flagsToStrip.has(a) && !flagsToStrip.has(args[i - 1]) && i > 0).join(' ');
         if (!ingestText || !ingestType) {
           result = { ok: false, error: 'Usage: ingest --type <lcm_message|lcm_summary> <text>' };
         } else if (ingestType !== 'lcm_message' && ingestType !== 'lcm_summary') {
