@@ -47,7 +47,7 @@ export function parseMarkdown(content: string, provenance: string, initialUserNa
     const kvMatch = trimmed.match(/^[-*]?\s*\**([A-Za-z][A-Za-z\s]+?)\**\s*:\s*(.+)/);
     if (kvMatch) {
       const key = kvMatch[1].trim().toLowerCase();
-      const value = kvMatch[2].trim();
+      const value = kvMatch[2].replace(/^\*+/, '').replace(/\*+$/, '').trim();
       // Override userName when Name: is found (unless locked by --user flag)
       if (key === 'name' && value && !lockUserName) {
         userName = value;
@@ -127,6 +127,31 @@ function keyValueToFact(key: string, value: string, userName: string, _section: 
     confidence: 0.7,
     provenance,
   };
+}
+
+/**
+ * Detect lines that look like config, code, paths, IDs, or technical metadata
+ * rather than personal facts.
+ */
+function looksLikeTechnicalLine(text: string): boolean {
+  // File paths, URLs, env vars
+  if (/^[\/~]/.test(text)) return true;
+  if (/^\w+[:=]\//.test(text)) return true;
+  // Contains arrows (→, ->, =>), likely a diagram or config
+  if (/[→]|->|=>/.test(text)) return true;
+  // Looks like a cron expression
+  if (/^\d+\s+\*|\*\/\d+/.test(text)) return true;
+  // UUIDs, hashes, long hex strings
+  if (/[0-9a-f]{12,}/i.test(text)) return true;
+  // JSON-like or code-like
+  if (/^\{.*\}$/.test(text.trim()) || /^\[.*\]$/.test(text.trim())) return true;
+  // Heavy punctuation ratio (code/config)
+  const punctCount = (text.match(/[{}()\[\]<>;=|&^%$#@!`~\\]/g) || []).length;
+  if (punctCount > text.length * 0.15) return true;
+  // Contains common config/code patterns
+  if (/\b(npm|tsx|node|import|export|const|function|class|interface|type\s)\b/.test(text)) return true;
+  if (/\b(localhost|127\.0\.0|0\.0\.0\.0)\b/.test(text)) return true;
+  return false;
 }
 
 function bulletToFact(text: string, userName: string, _section: string, provenance: string): ParsedFact | null {
@@ -252,7 +277,12 @@ function bulletToFact(text: string, userName: string, _section: string, provenan
     }
   }
 
-  // Default: general fact
+  // Skip technical/config lines that aren't personal facts
+  if (looksLikeTechnicalLine(text)) return null;
+
+  // Default: general fact (only for substantive personal content)
+  if (text.length < 25) return null;
+
   return {
     source: { name: userName, type: 'person' },
     relation: 'has_fact',

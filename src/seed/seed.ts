@@ -12,7 +12,7 @@ function detectUserName(filePath: string): string | undefined {
   try {
     const content = readFileSync(filePath, 'utf-8');
     const match = content.match(/^[-*]?\s*\**Name\**\s*:\s*(.+)/im);
-    return match ? match[1].trim() : undefined;
+    return match ? match[1].replace(/^\*+/, '').replace(/\*+$/, '').trim() : undefined;
   } catch {
     return undefined;
   }

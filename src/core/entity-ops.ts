@@ -40,14 +40,23 @@ export function findOrCreateEntity(name: string, type: string, summary?: string)
   return id;
 }
 
+// Types that are too generic to merge onto an entity that already has a specific type
+const GENERIC_TYPES = new Set(['concept']);
+const SPECIFIC_TYPES = new Set(['person', 'organization', 'place', 'service', 'product', 'event', 'doctor', 'contact']);
+
 function mergeTypeAndReturn(db: ReturnType<typeof getDb>, entityId: string, typesJson: string, newType: string): string {
   const currentTypes: string[] = JSON.parse(typesJson);
-  if (!currentTypes.includes(newType)) {
-    currentTypes.push(newType);
-    db.prepare(
-      "UPDATE entity SET types = ?, updated_at = datetime('now') WHERE id = ?"
-    ).run(JSON.stringify(currentTypes), entityId);
+  if (currentTypes.includes(newType)) return entityId;
+
+  // Don't add generic type if entity already has a specific one
+  if (GENERIC_TYPES.has(newType) && currentTypes.some(t => SPECIFIC_TYPES.has(t))) {
+    return entityId;
   }
+
+  currentTypes.push(newType);
+  db.prepare(
+    "UPDATE entity SET types = ?, updated_at = datetime('now') WHERE id = ?"
+  ).run(JSON.stringify(currentTypes), entityId);
   return entityId;
 }
 
