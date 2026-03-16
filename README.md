@@ -234,7 +234,7 @@ The agent invokes commands via `tsx ~/me.md-kg/src/cli.ts <command>` and parses 
 | Variable | Required | Description |
 |----------|----------|-------------|
 | `ANTHROPIC_API_KEY` | For AI features | Anthropic API key (Claude Sonnet) |
-| `VOYAGE_API_KEY` | For semantic search | Voyage AI key for embeddings |
+| `OPENAI_API_KEY` | For semantic search | OpenAI key for text-embedding-3-small |
 | `MEMD_DB_PATH` | No | Override database path (default: `~/.memd/kg.db`) |
 | `OPENCLAW_WORKSPACE` | No | Default workspace for seed command |
 

@@ -1,23 +1,23 @@
 /**
- * Voyage AI embeddings for semantic entity/relation search.
- * Uses VOYAGE_API_KEY from env. Falls back to keyword search if unavailable.
+ * OpenAI embeddings for semantic entity/relation search.
+ * Uses OPENAI_API_KEY from env. Falls back to keyword search if unavailable.
  */
 
-const VOYAGE_API_URL = 'https://api.voyageai.com/v1/embeddings';
-const EMBEDDING_MODEL = 'voyage-3-lite';
+const OPENAI_EMBEDDINGS_URL = 'https://api.openai.com/v1/embeddings';
+const EMBEDDING_MODEL = 'text-embedding-3-small';
 
 export function isEmbeddingsConfigured(): boolean {
-  return !!process.env.VOYAGE_API_KEY;
+  return !!process.env.OPENAI_API_KEY;
 }
 
 /**
- * Get embeddings for one or more texts via Voyage AI.
+ * Get embeddings for one or more texts via OpenAI.
  */
 export async function getEmbeddings(texts: string[]): Promise<number[][]> {
-  const apiKey = process.env.VOYAGE_API_KEY;
-  if (!apiKey) throw new Error('VOYAGE_API_KEY not set');
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) throw new Error('OPENAI_API_KEY not set');
 
-  const response = await fetch(VOYAGE_API_URL, {
+  const response = await fetch(OPENAI_EMBEDDINGS_URL, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -26,13 +26,12 @@ export async function getEmbeddings(texts: string[]): Promise<number[][]> {
     body: JSON.stringify({
       model: EMBEDDING_MODEL,
       input: texts,
-      input_type: 'document',
     }),
   });
 
   if (!response.ok) {
     const body = await response.text();
-    throw new Error(`Voyage API error (${response.status}): ${body}`);
+    throw new Error(`OpenAI Embeddings API error (${response.status}): ${body}`);
   }
 
   const data = await response.json() as {
@@ -46,32 +45,8 @@ export async function getEmbeddings(texts: string[]): Promise<number[][]> {
  * Get embedding for a single query text.
  */
 export async function getQueryEmbedding(text: string): Promise<number[]> {
-  const apiKey = process.env.VOYAGE_API_KEY;
-  if (!apiKey) throw new Error('VOYAGE_API_KEY not set');
-
-  const response = await fetch(VOYAGE_API_URL, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model: EMBEDDING_MODEL,
-      input: [text],
-      input_type: 'query',
-    }),
-  });
-
-  if (!response.ok) {
-    const body = await response.text();
-    throw new Error(`Voyage API error (${response.status}): ${body}`);
-  }
-
-  const data = await response.json() as {
-    data: Array<{ embedding: number[] }>;
-  };
-
-  return data.data[0].embedding;
+  const results = await getEmbeddings([text]);
+  return results[0];
 }
 
 /**
