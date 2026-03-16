@@ -18,11 +18,17 @@ export type EntityType =
   | 'doctor'
   | 'contact';
 
+export const VALID_ENTITY_TYPES: ReadonlySet<string> = new Set<EntityType>([
+  'person', 'organization', 'place', 'concept', 'service',
+  'product', 'event', 'skill', 'value', 'trait', 'preference',
+  'doctor', 'contact',
+]);
+
 // Core entity record
 export interface Entity {
   id: string;
   name: string;
-  type: EntityType;
+  types: EntityType[];
   summary?: string;
   properties?: Record<string, unknown>;
   access_tags: string[];

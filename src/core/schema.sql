@@ -4,11 +4,7 @@
 CREATE TABLE IF NOT EXISTS entity (
   id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(8)))),
   name TEXT NOT NULL,
-  type TEXT NOT NULL CHECK(type IN (
-    'person', 'organization', 'place', 'concept', 'service',
-    'product', 'event', 'skill', 'value', 'trait', 'preference',
-    'doctor', 'contact'
-  )),
+  types TEXT NOT NULL DEFAULT '["concept"]', -- JSON array of entity types
   summary TEXT,
   properties TEXT, -- JSON object
   access_tags TEXT NOT NULL DEFAULT '["all"]', -- JSON array
@@ -17,8 +13,6 @@ CREATE TABLE IF NOT EXISTS entity (
 );
 
 CREATE INDEX IF NOT EXISTS idx_entity_name ON entity(name);
-CREATE INDEX IF NOT EXISTS idx_entity_type ON entity(type);
-CREATE INDEX IF NOT EXISTS idx_entity_name_type ON entity(name, type);
 
 CREATE TABLE IF NOT EXISTS relation (
   id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(8)))),
@@ -83,3 +77,13 @@ CREATE TABLE IF NOT EXISTS assessment (
 );
 
 CREATE INDEX IF NOT EXISTS idx_assessment_type ON assessment(type);
+
+CREATE TABLE IF NOT EXISTS entity_alias (
+  id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(8)))),
+  entity_id TEXT NOT NULL REFERENCES entity(id) ON DELETE CASCADE,
+  alias TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_entity_alias_entity ON entity_alias(entity_id);
+CREATE INDEX IF NOT EXISTS idx_entity_alias_name ON entity_alias(alias);

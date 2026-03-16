@@ -58,9 +58,11 @@ npm run cli onboard
 | Command | Description |
 |---------|-------------|
 | `seed --workspace <path>` | Parse MEMORY.md, USER.md, and markdown files into the graph |
+| `seed --user <name>` | Override detected user name during seeding |
 | `stats` | Show entity/relation/episode counts by type |
 | `browse <name> [--depth N]` | Explore an entity's neighborhood (N-hop traversal) |
 | `add <text>` | Extract facts from text and insert into the graph |
+| `add --dry-run <text>` | Show extracted facts without inserting |
 | `verify` | Review unverified facts (confirm, reject, or edit) |
 | `verify --confirm <ids>` | Confirm specific facts by ID |
 | `verify --reject <ids>` | Reject specific facts by ID |
@@ -68,8 +70,16 @@ npm run cli onboard
 | `query <question>` | Natural language search across the graph |
 | `export --format <md\|claude\|json>` | Export verified knowledge |
 | `export --tags <tag1,tag2>` | Filter export by access tags |
+| `ingest --type <lcm_message\|lcm_summary> <text>` | Ingest text from LCM into the graph |
+| `merge <canonical> <name2> [name3...]` | Merge duplicate entities into one |
 | `onboard` | Guided multi-turn interview to build initial graph |
 | `onboard --reset` | Reset onboarding progress |
+
+### Global Flags
+
+| Flag | Description |
+|------|-------------|
+| `--dry-run` | Show what would happen without writing to the database (works with `seed` and `add`) |
 
 Every command outputs `{ ok: boolean, data?: any, error?: string }` as JSON to stdout. Logs go to stderr.
 
@@ -173,7 +183,7 @@ The agent invokes commands via `tsx ~/me.md-kg/src/cli.ts <command>` and parses 
 | Variable | Required | Description |
 |----------|----------|-------------|
 | `ANTHROPIC_API_KEY` | For AI features | Anthropic API key (Claude Sonnet) |
-| `SURREAL_DB_PATH` | No | Override database path (default: `~/.memd/kg.db`) |
+| `MEMD_DB_PATH` | No | Override database path (default: `~/.memd/kg.db`) |
 | `OPENCLAW_WORKSPACE` | No | Default workspace for seed command |
 
 ## Development

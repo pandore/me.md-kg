@@ -7,7 +7,7 @@ export function exportAsClaudeMd(tags?: string[]): string {
   const facts = db.prepare(`
     SELECT r.type, r.summary, r.confidence,
            s.name as source_name, t.name as target_name,
-           s.type as source_type, t.type as target_type,
+           s.types as source_types, t.types as target_types,
            r.access_tags
     FROM relation r
     JOIN entity s ON r.source_id = s.id
@@ -17,7 +17,7 @@ export function exportAsClaudeMd(tags?: string[]): string {
   `).all() as Array<{
     type: string; summary: string | null; confidence: number;
     source_name: string; target_name: string;
-    source_type: string; target_type: string;
+    source_types: string; target_types: string;
     access_tags: string;
   }>;
 

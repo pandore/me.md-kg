@@ -43,8 +43,8 @@ export function exportAsMarkdown(tags?: string[]): string {
 function getVerifiedFacts(db: ReturnType<typeof getDb>, tags?: string[]) {
   const query = `
     SELECT r.type, r.summary, r.confidence,
-           s.name as source_name, s.type as source_type,
-           t.name as target_name, t.type as target_type,
+           s.name as source_name, s.types as source_types,
+           t.name as target_name, t.types as target_types,
            r.access_tags
     FROM relation r
     JOIN entity s ON r.source_id = s.id
@@ -55,8 +55,8 @@ function getVerifiedFacts(db: ReturnType<typeof getDb>, tags?: string[]) {
 
   const results = db.prepare(query).all() as Array<{
     type: string; summary: string | null; confidence: number;
-    source_name: string; source_type: string;
-    target_name: string; target_type: string;
+    source_name: string; source_types: string;
+    target_name: string; target_types: string;
     access_tags: string;
   }>;
 
@@ -73,8 +73,8 @@ function getVerifiedFacts(db: ReturnType<typeof getDb>, tags?: string[]) {
 
 function organizeFacts(facts: Array<{
   type: string; summary: string | null; confidence: number;
-  source_name: string; source_type: string;
-  target_name: string; target_type: string;
+  source_name: string; source_types: string;
+  target_name: string; target_types: string;
 }>): ExportSection[] {
   const sectionMap: Record<string, ExportSection> = {
     identity: { title: 'Identity & Background', facts: [] },
@@ -96,21 +96,22 @@ function organizeFacts(facts: Array<{
       target: fact.target_name,
     };
 
-    const section = categorizeRelation(fact.type, fact.source_type, fact.target_type);
+    const targetTypes: string[] = JSON.parse(fact.target_types);
+    const section = categorizeRelation(fact.type, targetTypes);
     (sectionMap[section] || sectionMap.other).facts.push(f);
   }
 
   return Object.values(sectionMap);
 }
 
-function categorizeRelation(relationType: string, sourceType: string, targetType: string): string {
+function categorizeRelation(relationType: string, targetTypes: string[]): string {
   if (['works_at', 'has_role', 'manages', 'created', 'founded'].includes(relationType)) return 'work';
   if (['lives_in', 'moved_to', 'born_in'].includes(relationType)) return 'places';
   if (['knows', 'has_doctor', 'is_doctor_of', 'family', 'friend'].includes(relationType)) return 'relationships';
   if (['prefers', 'values', 'believes'].includes(relationType)) return 'preferences';
   if (['has_skill', 'speaks', 'expert_in'].includes(relationType)) return 'skills';
   if (['uses', 'uses_service', 'subscribes'].includes(relationType)) return 'services';
-  if (targetType === 'doctor' || relationType.includes('health') || relationType.includes('medical')) return 'health';
+  if (targetTypes.includes('doctor') || relationType.includes('health') || relationType.includes('medical')) return 'health';
   if (['has_name', 'has_nationality', 'has_property'].includes(relationType)) return 'identity';
   return 'other';
 }

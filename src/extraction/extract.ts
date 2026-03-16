@@ -96,7 +96,7 @@ function parseExtractionResponse(responseText: string): ExtractedFact[] {
 /**
  * Insert extracted facts into the database.
  */
-export function insertFacts(facts: ExtractedFact[], provenance: string): { inserted: number; deduplicated: number } {
+export function insertFacts(facts: ExtractedFact[], provenance: string, sourceType: string = 'manual'): { inserted: number; deduplicated: number } {
   let inserted = 0;
   let deduplicated = 0;
 
@@ -129,7 +129,7 @@ export function insertFacts(facts: ExtractedFact[], provenance: string): { inser
 
     createEpisode({
       relation_id: relationId,
-      source_type: 'manual',
+      source_type: sourceType,
       content: fact.summary,
     });
 
@@ -186,6 +186,120 @@ function fallbackExtract(text: string): ExtractedFact[] {
           target_entity: { name: placeMatch[1].trim(), type: 'place' },
           summary: sentence,
           confidence: 0.65,
+        });
+        continue;
+      }
+    }
+
+    // Ukrainian patterns
+    if (/(?:працює\s+(?:в|на)|засновник)\s+(.+)/i.test(sentence)) {
+      const match = sentence.match(/(?:працює\s+(?:в|на)|засновник)\s+(.+)/i);
+      if (match) {
+        facts.push({
+          source_entity: { name: 'User', type: 'person' },
+          relation_type: 'works_at',
+          target_entity: { name: match[1].trim(), type: 'organization' },
+          summary: sentence,
+          confidence: 0.65,
+        });
+        continue;
+      }
+    }
+
+    if (/(?:живе\s+в|переїхав\s+(?:до|в))\s+(.+)/i.test(sentence)) {
+      const match = sentence.match(/(?:живе\s+в|переїхав\s+(?:до|в))\s+(.+)/i);
+      if (match) {
+        facts.push({
+          source_entity: { name: 'User', type: 'person' },
+          relation_type: 'lives_in',
+          target_entity: { name: match[1].trim(), type: 'place' },
+          summary: sentence,
+          confidence: 0.65,
+        });
+        continue;
+      }
+    }
+
+    if (/\b(лікар|доктор)\b/i.test(sentence)) {
+      const nameMatch = sentence.match(/(?:лікар|доктор)\s+(.+)/i);
+      if (nameMatch) {
+        facts.push({
+          source_entity: { name: 'User', type: 'person' },
+          relation_type: 'has_doctor',
+          target_entity: { name: nameMatch[1].trim(), type: 'doctor' },
+          summary: sentence,
+          confidence: 0.65,
+        });
+        continue;
+      }
+    }
+
+    if (/\bвикористовує\s+(.+)/i.test(sentence)) {
+      const match = sentence.match(/використовує\s+(.+)/i);
+      if (match) {
+        facts.push({
+          source_entity: { name: 'User', type: 'person' },
+          relation_type: 'uses',
+          target_entity: { name: match[1].trim(), type: 'service' },
+          summary: sentence,
+          confidence: 0.6,
+        });
+        continue;
+      }
+    }
+
+    // Portuguese patterns
+    if (/(?:trabalha\s+(?:em|na|no)|fundador\s+(?:de|da|do))\s+(.+)/i.test(sentence)) {
+      const match = sentence.match(/(?:trabalha\s+(?:em|na|no)|fundador\s+(?:de|da|do))\s+(.+)/i);
+      if (match) {
+        facts.push({
+          source_entity: { name: 'User', type: 'person' },
+          relation_type: 'works_at',
+          target_entity: { name: match[1].trim(), type: 'organization' },
+          summary: sentence,
+          confidence: 0.65,
+        });
+        continue;
+      }
+    }
+
+    if (/(?:mora\s+(?:em|na|no)|mudou\s+para)\s+(.+)/i.test(sentence)) {
+      const match = sentence.match(/(?:mora\s+(?:em|na|no)|mudou\s+para)\s+(.+)/i);
+      if (match) {
+        facts.push({
+          source_entity: { name: 'User', type: 'person' },
+          relation_type: 'lives_in',
+          target_entity: { name: match[1].trim(), type: 'place' },
+          summary: sentence,
+          confidence: 0.65,
+        });
+        continue;
+      }
+    }
+
+    if (/\b(médico|doutor|doutora)\b/i.test(sentence)) {
+      const nameMatch = sentence.match(/(?:médico|doutor|doutora)\s+(.+)/i);
+      if (nameMatch) {
+        facts.push({
+          source_entity: { name: 'User', type: 'person' },
+          relation_type: 'has_doctor',
+          target_entity: { name: nameMatch[1].trim(), type: 'doctor' },
+          summary: sentence,
+          confidence: 0.65,
+        });
+        continue;
+      }
+    }
+
+    if (/\busa\s+(.+)/i.test(sentence)) {
+      const match = sentence.match(/\busa\s+(.+)/i);
+      if (match) {
+        facts.push({
+          source_entity: { name: 'User', type: 'person' },
+          relation_type: 'uses',
+          target_entity: { name: match[1].trim(), type: 'service' },
+          summary: sentence,
+          confidence: 0.6,
         });
         continue;
       }

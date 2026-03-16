@@ -6,22 +6,33 @@ function genId(): string {
 }
 
 /**
- * Find entity by name and type (case-insensitive), or create if not found.
+ * Find entity by name (case-insensitive), or create if not found.
+ * If found, merges the new type into the existing types array.
  * Returns entity ID.
  */
 export function findOrCreateEntity(name: string, type: string, summary?: string): string {
   const db = getDb();
 
   const existing = db.prepare(
-    'SELECT id FROM entity WHERE LOWER(name) = LOWER(?) AND type = ?'
-  ).get(name, type) as { id: string } | undefined;
+    'SELECT id, types FROM entity WHERE LOWER(name) = LOWER(?)'
+  ).get(name) as { id: string; types: string } | undefined;
 
-  if (existing) return existing.id;
+  if (existing) {
+    // Merge type into existing types array
+    const currentTypes: string[] = JSON.parse(existing.types);
+    if (!currentTypes.includes(type)) {
+      currentTypes.push(type);
+      db.prepare(
+        "UPDATE entity SET types = ?, updated_at = datetime('now') WHERE id = ?"
+      ).run(JSON.stringify(currentTypes), existing.id);
+    }
+    return existing.id;
+  }
 
   const id = genId();
   db.prepare(
-    'INSERT INTO entity (id, name, type, summary) VALUES (?, ?, ?, ?)'
-  ).run(id, name, type, summary || null);
+    'INSERT INTO entity (id, name, types, summary) VALUES (?, ?, ?, ?)'
+  ).run(id, name, JSON.stringify([type]), summary || null);
 
   return id;
 }
@@ -29,11 +40,14 @@ export function findOrCreateEntity(name: string, type: string, summary?: string)
 /**
  * Find entity by name (case-insensitive, any type).
  */
-export function findEntityByName(name: string): { id: string; name: string; type: string; summary: string | null } | undefined {
+export function findEntityByName(name: string): { id: string; name: string; types: string[]; summary: string | null } | undefined {
   const db = getDb();
-  return db.prepare(
-    'SELECT id, name, type, summary FROM entity WHERE LOWER(name) = LOWER(?)'
-  ).get(name) as { id: string; name: string; type: string; summary: string | null } | undefined;
+  const row = db.prepare(
+    'SELECT id, name, types, summary FROM entity WHERE LOWER(name) = LOWER(?)'
+  ).get(name) as { id: string; name: string; types: string; summary: string | null } | undefined;
+
+  if (!row) return undefined;
+  return { ...row, types: JSON.parse(row.types) };
 }
 
 /**

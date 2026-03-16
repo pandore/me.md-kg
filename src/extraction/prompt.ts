@@ -3,7 +3,9 @@ export function buildExtractionSystemPrompt(): string {
 
 Output ONLY a valid JSON array with no markdown code fences, no explanation, and no commentary.
 
-Each triple should capture a meaningful fact about the person, their relationships, activities, preferences, or characteristics.`;
+Each triple should capture a meaningful fact about the person, their relationships, activities, preferences, or characteristics.
+
+The text may be in any language (English, Ukrainian, Portuguese, etc.). Extract facts regardless of language, but use English for relation_type values.`;
 }
 
 export function buildExtractionUserPrompt(text: string): string {

@@ -13,21 +13,21 @@ export interface ParsedFact {
  * Parse a MEMORY.md or USER.md file into structured facts.
  * Handles sections, bullets, key-value pairs.
  */
-export function parseMarkdownFile(filePath: string, provenance: string): ParsedFact[] {
+export function parseMarkdownFile(filePath: string, provenance: string, userName?: string): ParsedFact[] {
   let content: string;
   try {
     content = readFileSync(filePath, 'utf-8');
   } catch {
     return [];
   }
-  return parseMarkdown(content, provenance);
+  return parseMarkdown(content, provenance, userName);
 }
 
-export function parseMarkdown(content: string, provenance: string): ParsedFact[] {
+export function parseMarkdown(content: string, provenance: string, initialUserName?: string): ParsedFact[] {
   const facts: ParsedFact[] = [];
   const lines = content.split('\n');
   let currentSection = 'General';
-  const userName = 'Oleksii'; // Default — will be overridden if found
+  let userName = initialUserName || 'User';
 
   for (const line of lines) {
     const trimmed = line.trim();
@@ -48,6 +48,10 @@ export function parseMarkdown(content: string, provenance: string): ParsedFact[]
     if (kvMatch) {
       const key = kvMatch[1].trim().toLowerCase();
       const value = kvMatch[2].trim();
+      // Override userName when Name: is found
+      if (key === 'name' && value) {
+        userName = value;
+      }
       const fact = keyValueToFact(key, value, userName, currentSection, provenance);
       if (fact) facts.push(fact);
       continue;
@@ -188,6 +192,64 @@ function bulletToFact(text: string, userName: string, _section: string, provenan
       confidence: 0.7,
       provenance,
     };
+  }
+
+  // Ukrainian patterns
+  if (/(?:працює\s+(?:в|на)|засновник)\s+(.+)/i.test(text)) {
+    const match = text.match(/(?:працює\s+(?:в|на)|засновник)\s+(.+)/i);
+    if (match) {
+      return {
+        source: { name: userName, type: 'person' },
+        relation: 'works_at',
+        target: { name: match[1].trim(), type: 'organization' },
+        summary: text,
+        confidence: 0.75,
+        provenance,
+      };
+    }
+  }
+
+  if (/(?:живе\s+в|переїхав\s+(?:до|в))\s+(.+)/i.test(text)) {
+    const match = text.match(/(?:живе\s+в|переїхав\s+(?:до|в))\s+(.+)/i);
+    if (match) {
+      return {
+        source: { name: userName, type: 'person' },
+        relation: 'lives_in',
+        target: { name: match[1].trim(), type: 'place' },
+        summary: text,
+        confidence: 0.75,
+        provenance,
+      };
+    }
+  }
+
+  // Portuguese patterns
+  if (/(?:trabalha\s+(?:em|na|no)|fundador\s+(?:de|da|do))\s+(.+)/i.test(text)) {
+    const match = text.match(/(?:trabalha\s+(?:em|na|no)|fundador\s+(?:de|da|do))\s+(.+)/i);
+    if (match) {
+      return {
+        source: { name: userName, type: 'person' },
+        relation: 'works_at',
+        target: { name: match[1].trim(), type: 'organization' },
+        summary: text,
+        confidence: 0.75,
+        provenance,
+      };
+    }
+  }
+
+  if (/(?:mora\s+(?:em|na|no)|mudou\s+para)\s+(.+)/i.test(text)) {
+    const match = text.match(/(?:mora\s+(?:em|na|no)|mudou\s+para)\s+(.+)/i);
+    if (match) {
+      return {
+        source: { name: userName, type: 'person' },
+        relation: 'lives_in',
+        target: { name: match[1].trim(), type: 'place' },
+        summary: text,
+        confidence: 0.75,
+        provenance,
+      };
+    }
   }
 
   // Default: general fact

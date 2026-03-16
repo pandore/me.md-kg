@@ -3,7 +3,7 @@ import { getDb } from '../core/db.js';
 interface BrowseEntity {
   id: string;
   name: string;
-  type: string;
+  types: string[];
   summary: string | null;
 }
 
@@ -18,19 +18,23 @@ interface BrowseRelation {
   related_entity: BrowseEntity;
 }
 
+function parseEntity(row: { id: string; name: string; types: string; summary: string | null }): BrowseEntity {
+  return { id: row.id, name: row.name, types: JSON.parse(row.types), summary: row.summary };
+}
+
 export function browse(name: string, depth: number = 1) {
   const db = getDb();
 
   // Find entity by name (case-insensitive)
-  const entity = db.prepare(`
-    SELECT id, name, type, summary FROM entity WHERE LOWER(name) = LOWER(?)
-  `).get(name) as BrowseEntity | undefined;
+  const rawEntity = db.prepare(`
+    SELECT id, name, types, summary FROM entity WHERE LOWER(name) = LOWER(?)
+  `).get(name) as { id: string; name: string; types: string; summary: string | null } | undefined;
 
-  if (!entity) {
+  if (!rawEntity) {
     // Try partial match
     const partial = db.prepare(`
-      SELECT id, name, type, summary FROM entity WHERE LOWER(name) LIKE LOWER(?)
-    `).all(`%${name}%`) as BrowseEntity[];
+      SELECT id, name, types, summary FROM entity WHERE LOWER(name) LIKE LOWER(?)
+    `).all(`%${name}%`) as Array<{ id: string; name: string; types: string; summary: string | null }>;
 
     if (partial.length === 0) {
       return { ok: false as const, error: `Entity "${name}" not found` };
@@ -40,15 +44,15 @@ export function browse(name: string, depth: number = 1) {
         ok: true as const,
         data: {
           message: `Multiple entities match "${name}". Be more specific.`,
-          matches: partial.map(e => ({ name: e.name, type: e.type })),
+          matches: partial.map(e => ({ name: e.name, types: JSON.parse(e.types) })),
         },
       };
     }
     // Exactly one partial match
-    return browseEntity(db, partial[0], depth);
+    return browseEntity(db, parseEntity(partial[0]), depth);
   }
 
-  return browseEntity(db, entity, depth);
+  return browseEntity(db, parseEntity(rawEntity), depth);
 }
 
 function browseEntity(db: ReturnType<typeof getDb>, entity: BrowseEntity, depth: number) {
@@ -65,14 +69,14 @@ function browseEntity(db: ReturnType<typeof getDb>, entity: BrowseEntity, depth:
     // Outgoing relations
     const outgoing = db.prepare(`
       SELECT r.type, r.summary, r.confidence, r.verified, r.valid_from, r.valid_until,
-             e.id as eid, e.name as ename, e.type as etype, e.summary as esummary
+             e.id as eid, e.name as ename, e.types as etypes, e.summary as esummary
       FROM relation r
       JOIN entity e ON r.target_id = e.id
       WHERE r.source_id IN (${placeholders})
     `).all(...currentIds) as Array<{
       type: string; summary: string | null; confidence: number; verified: number;
       valid_from: string | null; valid_until: string | null;
-      eid: string; ename: string; etype: string; esummary: string | null;
+      eid: string; ename: string; etypes: string; esummary: string | null;
     }>;
 
     for (const row of outgoing) {
@@ -84,7 +88,7 @@ function browseEntity(db: ReturnType<typeof getDb>, entity: BrowseEntity, depth:
         verified: !!row.verified,
         valid_from: row.valid_from,
         valid_until: row.valid_until,
-        related_entity: { id: row.eid, name: row.ename, type: row.etype, summary: row.esummary },
+        related_entity: { id: row.eid, name: row.ename, types: JSON.parse(row.etypes), summary: row.esummary },
       });
       if (!visited.has(row.eid)) {
         visited.add(row.eid);
@@ -95,14 +99,14 @@ function browseEntity(db: ReturnType<typeof getDb>, entity: BrowseEntity, depth:
     // Incoming relations
     const incoming = db.prepare(`
       SELECT r.type, r.summary, r.confidence, r.verified, r.valid_from, r.valid_until,
-             e.id as eid, e.name as ename, e.type as etype, e.summary as esummary
+             e.id as eid, e.name as ename, e.types as etypes, e.summary as esummary
       FROM relation r
       JOIN entity e ON r.source_id = e.id
       WHERE r.target_id IN (${placeholders})
     `).all(...currentIds) as Array<{
       type: string; summary: string | null; confidence: number; verified: number;
       valid_from: string | null; valid_until: string | null;
-      eid: string; ename: string; etype: string; esummary: string | null;
+      eid: string; ename: string; etypes: string; esummary: string | null;
     }>;
 
     for (const row of incoming) {
@@ -114,7 +118,7 @@ function browseEntity(db: ReturnType<typeof getDb>, entity: BrowseEntity, depth:
         verified: !!row.verified,
         valid_from: row.valid_from,
         valid_until: row.valid_until,
-        related_entity: { id: row.eid, name: row.ename, type: row.etype, summary: row.esummary },
+        related_entity: { id: row.eid, name: row.ename, types: JSON.parse(row.etypes), summary: row.esummary },
       });
       if (!visited.has(row.eid)) {
         visited.add(row.eid);
@@ -131,7 +135,7 @@ function browseEntity(db: ReturnType<typeof getDb>, entity: BrowseEntity, depth:
       entity: {
         id: entity.id,
         name: entity.name,
-        type: entity.type,
+        types: entity.types,
         summary: entity.summary,
       },
       relations,

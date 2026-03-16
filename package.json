@@ -5,6 +5,9 @@
   "author": "Oleksii Nikitin",
   "license": "MIT",
   "type": "module",
+  "bin": {
+    "memd": "./src/cli.ts"
+  },
   "engines": {
     "node": ">=22"
   },

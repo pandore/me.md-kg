@@ -4,7 +4,10 @@ export function stats() {
   const db = getDb();
 
   const entityCounts = db.prepare(`
-    SELECT type, COUNT(*) as count FROM entity GROUP BY type ORDER BY count DESC
+    SELECT j.value as type, COUNT(DISTINCT e.id) as count
+    FROM entity e, json_each(e.types) j
+    GROUP BY j.value
+    ORDER BY count DESC
   `).all() as Array<{ type: string; count: number }>;
 
   const totalEntities = db.prepare('SELECT COUNT(*) as count FROM entity').get() as { count: number };

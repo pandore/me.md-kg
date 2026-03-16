@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+#!/usr/bin/env tsx
 import { initSchema, closeDb } from './core/db.js';
 
 // CLI output contract: every command outputs { ok: boolean, data?: any, error?: string } to stdout
@@ -18,7 +18,7 @@ async function main() {
     console.log(JSON.stringify({
       ok: true,
       data: {
-        commands: ['seed', 'stats', 'browse', 'add', 'verify', 'query', 'export', 'onboard'],
+        commands: ['seed', 'stats', 'browse', 'add', 'verify', 'query', 'export', 'merge', 'ingest', 'onboard'],
         usage: 'tsx src/cli.ts <command> [args]',
       },
     }));
@@ -33,6 +33,7 @@ async function main() {
     process.exit(1);
   }
 
+  const dryRun = args.includes('--dry-run');
   let result: CommandResult;
 
   try {
@@ -40,7 +41,8 @@ async function main() {
       case 'seed': {
         const { seed } = await import('./seed/seed.js');
         const workspacePath = getFlag(args, '--workspace') || process.env.OPENCLAW_WORKSPACE;
-        result = await seed(workspacePath);
+        const seedUser = getFlag(args, '--user');
+        result = await seed(workspacePath, seedUser, dryRun);
         break;
       }
       case 'stats': {
@@ -61,11 +63,11 @@ async function main() {
       }
       case 'add': {
         const { add } = await import('./commands/add.js');
-        const text = args.slice(1).join(' ');
-        if (!text) {
-          result = { ok: false, error: 'Usage: add <text>' };
+        const addText = args.filter(a => a !== '--dry-run').slice(1).join(' ');
+        if (!addText) {
+          result = { ok: false, error: 'Usage: add <text> [--dry-run]' };
         } else {
-          result = await add(text);
+          result = await add(addText, dryRun);
         }
         break;
       }
@@ -94,6 +96,29 @@ async function main() {
         const format = getFlag(args, '--format') || 'md';
         const tags = getFlag(args, '--tags');
         result = exportKg(format, tags);
+        break;
+      }
+      case 'ingest': {
+        const { ingest } = await import('./commands/ingest.js');
+        const ingestType = getFlag(args, '--type') as 'lcm_message' | 'lcm_summary' | undefined;
+        const ingestText = args.filter((a, i) => a !== '--type' && args[i - 1] !== '--type' && i > 0).join(' ');
+        if (!ingestText || !ingestType) {
+          result = { ok: false, error: 'Usage: ingest --type <lcm_message|lcm_summary> <text>' };
+        } else if (ingestType !== 'lcm_message' && ingestType !== 'lcm_summary') {
+          result = { ok: false, error: 'Type must be lcm_message or lcm_summary' };
+        } else {
+          result = await ingest(ingestText, ingestType);
+        }
+        break;
+      }
+      case 'merge': {
+        const { merge } = await import('./commands/merge.js');
+        const mergeNames = args.slice(1);
+        if (mergeNames.length < 2) {
+          result = { ok: false, error: 'Usage: merge <canonical-name> <name2> [name3 ...]' };
+        } else {
+          result = merge(mergeNames);
+        }
         break;
       }
       case 'onboard': {

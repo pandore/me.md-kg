@@ -12,7 +12,7 @@ import { markVerified, markRejected, editAndVerify, getUnverifiedBatch } from '.
 const TEST_DB_PATH = `/tmp/memd-test-${process.pid}.db`;
 
 beforeEach(() => {
-  process.env.SURREAL_DB_PATH = TEST_DB_PATH;
+  process.env.MEMD_DB_PATH = TEST_DB_PATH;
   initSchema();
 });
 
@@ -35,7 +35,18 @@ describe('entity-ops', () => {
     const found = findEntityByName('Oleksii');
     expect(found).toBeDefined();
     expect(found!.name).toBe('Oleksii');
-    expect(found!.type).toBe('person');
+    expect(found!.types).toContain('person');
+  });
+
+  it('merges types when entity already exists', () => {
+    const id1 = findOrCreateEntity('Patricia', 'person');
+    const id2 = findOrCreateEntity('Patricia', 'doctor');
+    expect(id1).toBe(id2); // same entity
+
+    const found = findEntityByName('Patricia');
+    expect(found).toBeDefined();
+    expect(found!.types).toContain('person');
+    expect(found!.types).toContain('doctor');
   });
 
   it('creates relations and episodes', () => {
