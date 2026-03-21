@@ -17,6 +17,7 @@ import { verify } from './commands/verify.js';
 import { exportKg } from './commands/export.js';
 import { merge } from './commands/merge.js';
 import { ingest } from './commands/ingest.js';
+import { onboard } from './commands/onboard.js';
 
 // Initialize database
 initSchema();
@@ -98,6 +99,19 @@ server.tool('kg_ingest', 'Ingest text from external sources (LCM messages/summar
 }, async ({ text, source_type }) => {
   const result = await ingest(text, source_type);
   return { content: [{ type: 'text', text: JSON.stringify(result.data, null, 2) }] };
+});
+
+// kg_onboard — guided interview to build knowledge graph
+server.tool('kg_onboard', 'Guided onboarding interview to build knowledge graph — adaptive, multilingual, with suggested answers', {
+  message: z.string().optional().describe('User answer or empty to get first/next question'),
+  action: z.enum(['answer', 'skip', 'status', 'reset']).optional().default('answer').describe('Action to perform'),
+}, async ({ message, action }) => {
+  let input = message || '';
+  if (action === 'skip') input = 'skip';
+  if (action === 'status') input = '--status';
+  if (action === 'reset') input = '--reset';
+  const result = await onboard(input);
+  return { content: [{ type: 'text', text: JSON.stringify(result.ok ? result.data : { error: result.error }, null, 2) }] };
 });
 
 // Start stdio transport

@@ -134,8 +134,13 @@ async function main() {
         break;
       }
       case 'onboard': {
+        if (args.includes('--interactive')) {
+          const { onboardInteractive } = await import('./commands/onboard.js');
+          result = await onboardInteractive() as CommandResult;
+          break;
+        }
         const { onboard } = await import('./commands/onboard.js');
-        const userMessage = args.slice(1).join(' ');
+        const userMessage = args.filter(a => a !== '--interactive').slice(1).join(' ');
         result = await onboard(userMessage);
         break;
       }
