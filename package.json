@@ -22,7 +22,8 @@
     "query": "tsx src/cli.ts query",
     "browse": "tsx src/cli.ts browse",
     "stats": "tsx src/cli.ts stats",
-    "mcp": "tsx src/mcp-server.ts"
+    "mcp": "tsx src/mcp-server.ts",
+    "serve": "tsx src/cli.ts serve"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.13",
@@ -32,7 +33,9 @@
     "vitest": "^4.1.0"
   },
   "dependencies": {
+    "@hono/node-server": "^1.19.11",
     "@modelcontextprotocol/sdk": "^1.27.1",
-    "better-sqlite3": "^12.8.0"
+    "better-sqlite3": "^12.8.0",
+    "hono": "^4.12.8"
   }
 }

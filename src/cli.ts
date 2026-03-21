@@ -18,7 +18,7 @@ async function main() {
     console.log(JSON.stringify({
       ok: true,
       data: {
-        commands: ['seed', 'stats', 'browse', 'add', 'verify', 'query', 'export', 'merge', 'ingest', 'watch', 'onboard'],
+        commands: ['seed', 'stats', 'browse', 'add', 'verify', 'query', 'export', 'merge', 'ingest', 'watch', 'onboard', 'serve'],
         usage: 'tsx src/cli.ts <command> [args]',
       },
     }));
@@ -132,6 +132,14 @@ async function main() {
           result = await watchDir(watchPath, watchType);
         }
         break;
+      }
+      case 'serve': {
+        const { serve } = await import('./commands/serve.js');
+        const port = parseInt(getFlag(args, '--port') || '3847', 10);
+        const botToken = getFlag(args, '--bot-token');
+        const webAppUrl = getFlag(args, '--url');
+        await serve({ port, botToken, webAppUrl });
+        return; // never reached — server runs forever
       }
       case 'onboard': {
         if (args.includes('--interactive')) {

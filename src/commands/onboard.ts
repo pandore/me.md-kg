@@ -7,7 +7,10 @@ import { buildOnboardSystemPrompt } from '../onboarding/prompts.js';
 import { getDb } from '../core/db.js';
 import type { ExtractedFact } from '../core/types.js';
 
-const STATE_PATH = resolve(process.env.HOME || '~', '.memd', 'onboard-state.json');
+function statePath(sessionId?: string): string {
+  const suffix = sessionId ? `-${sessionId}` : '';
+  return resolve(process.env.HOME || '~', '.memd', `onboard-state${suffix}.json`);
+}
 
 const ONBOARD_AREAS = [
   'Who You Are',
@@ -28,7 +31,7 @@ interface AreaState {
   isComplete: boolean;
 }
 
-interface OnboardStateV2 {
+export interface OnboardStateV2 {
   version: 2;
   language: string | null;
   areas: AreaState[];
@@ -136,10 +139,11 @@ function migrateV1toV2(v1: OnboardStateV1): OnboardStateV2 {
   return state;
 }
 
-export function loadState(): OnboardStateV2 {
+export function loadState(sessionId?: string): OnboardStateV2 {
+  const path = statePath(sessionId);
   try {
-    if (existsSync(STATE_PATH)) {
-      const raw = JSON.parse(readFileSync(STATE_PATH, 'utf-8'));
+    if (existsSync(path)) {
+      const raw = JSON.parse(readFileSync(path, 'utf-8'));
       if (raw.version === 2) {
         return raw as OnboardStateV2;
       }
@@ -150,10 +154,11 @@ export function loadState(): OnboardStateV2 {
   return freshState();
 }
 
-function saveState(state: OnboardStateV2): void {
+function saveState(state: OnboardStateV2, sessionId?: string): void {
   state.lastActiveAt = new Date().toISOString();
-  mkdirSync(dirname(STATE_PATH), { recursive: true });
-  writeFileSync(STATE_PATH, JSON.stringify(state, null, 2));
+  const path = statePath(sessionId);
+  mkdirSync(dirname(path), { recursive: true });
+  writeFileSync(path, JSON.stringify(state, null, 2));
 }
 
 // --- AI response parsing ---
@@ -192,12 +197,12 @@ function parseAIResponse(raw: string): ParsedAIResponse {
 
 // --- Core onboard function ---
 
-export async function onboard(userMessage: string) {
+export async function onboard(userMessage: string, sessionId?: string) {
   if (!isApiKeyConfigured()) {
     return { ok: false as const, error: 'ANTHROPIC_API_KEY required for onboarding interviews' };
   }
 
-  const state = loadState();
+  const state = loadState(sessionId);
 
   // Status check
   if (userMessage === '--status') {
@@ -226,7 +231,7 @@ export async function onboard(userMessage: string) {
 
   // Reset
   if (userMessage === '--reset') {
-    saveState(freshState());
+    saveState(freshState(), sessionId);
     return { ok: true as const, data: { message: 'Onboarding reset. Run `onboard` to start fresh.' } };
   }
 
@@ -285,12 +290,12 @@ export async function onboard(userMessage: string) {
 
     if (state.currentAreaIndex >= ONBOARD_AREAS.length) {
       state.isComplete = true;
-      saveState(state);
+      saveState(state, sessionId);
       return buildCompletionResponse(state);
     }
 
     // Generate question for next area
-    return await generateNextQuestion(state, '', lastExtractedFacts);
+    return await generateNextQuestion(state, '', lastExtractedFacts, sessionId);
   }
 
   // If we have a user answer and it's not the first call, check area completion
@@ -307,7 +312,7 @@ export async function onboard(userMessage: string) {
 
       if (state.currentAreaIndex >= ONBOARD_AREAS.length) {
         state.isComplete = true;
-        saveState(state);
+        saveState(state, sessionId);
         return buildCompletionResponse(state);
       }
     }
@@ -315,13 +320,14 @@ export async function onboard(userMessage: string) {
     // For substantive answers, let AI decide via [AREA_COMPLETE]
   }
 
-  return await generateNextQuestion(state, userMessage, lastExtractedFacts);
+  return await generateNextQuestion(state, userMessage, lastExtractedFacts, sessionId);
 }
 
 async function generateNextQuestion(
   state: OnboardStateV2,
   userMessage: string,
   lastExtractedFacts: string[],
+  sessionId?: string,
 ) {
   const currentArea = state.areas[state.currentAreaIndex];
   const existingFacts = getExistingFactsForArea(currentArea.area);
@@ -371,18 +377,18 @@ async function generateNextQuestion(
 
     if (state.currentAreaIndex >= ONBOARD_AREAS.length) {
       state.isComplete = true;
-      saveState(state);
+      saveState(state, sessionId);
       return buildCompletionResponse(state);
     }
 
     // Recursively get question for next area
-    return await generateNextQuestion(state, '', lastExtractedFacts);
+    return await generateNextQuestion(state, '', lastExtractedFacts, sessionId);
   }
 
   // Save resume context
   state.lastQuestion = parsed.message;
   state.lastSuggestedAnswers = parsed.suggestedAnswers.length > 0 ? parsed.suggestedAnswers : null;
-  saveState(state);
+  saveState(state, sessionId);
 
   const areaObj = state.areas[state.currentAreaIndex];
   return {
@@ -443,6 +449,41 @@ async function buildCompletionResponse(state: OnboardStateV2) {
         factsExtracted: a.factsExtracted,
       })),
     },
+  };
+}
+
+// --- Summary for API ---
+
+export function getOnboardSummary(sessionId?: string) {
+  const state = loadState(sessionId);
+  const db = getDb();
+
+  const entityCount = (db.prepare('SELECT COUNT(*) as c FROM entity').get() as any)?.c || 0;
+  const relationCount = (db.prepare('SELECT COUNT(*) as c FROM relation WHERE valid_until IS NULL').get() as any)?.c || 0;
+
+  const byArea: Record<string, number> = {};
+  for (const a of state.areas) {
+    byArea[a.area] = a.factsExtracted;
+  }
+
+  // Get highlight facts (high confidence, recent)
+  const highlights = (db.prepare(`
+    SELECT s.name || ' ' || r.type || ' ' || t.name as fact
+    FROM relation r
+    JOIN entity s ON r.source_id = s.id
+    JOIN entity t ON r.target_id = t.id
+    WHERE r.valid_until IS NULL AND r.provenance LIKE 'interview:%'
+    ORDER BY r.confidence DESC, r.created_at DESC
+    LIMIT 5
+  `).all() as Array<{ fact: string }>).map(r => r.fact);
+
+  return {
+    totalFacts: state.totalFactsExtracted,
+    byArea,
+    entities: entityCount,
+    relations: relationCount,
+    highlights,
+    isComplete: state.isComplete,
   };
 }
 
